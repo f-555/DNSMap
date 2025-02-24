@@ -1,3 +1,3 @@
 # DNSMap
 
-A Comprehensive knowledge graph for DNS recursive server
+A Comprehensive Knowledge Graph for Open DNS Recursive Server
