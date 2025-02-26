@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>odns Map</title>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vis-network@9.0.0/dist/vis-network.min.js"></script>
+    <style>
+        /* 设置图形容器的大小 */
+        #network {
+            width: 100%;
+            height: 800px;
+            border: 1px solid lightgray;
+        }
+
+        /* 设置静态框样式 */
+        #info-box {
+            position: absolute;
+            top: 520px;
+            left: 20px;
+            width: 300px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        #info-box h3 {
+            margin-top: 0;
+        }
+
+        /* 表单样式 */
+        #filter-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 15px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            z-index: 10;
+        }
+
+        /* 确保按钮可点击 */
+        #filter-box button {
+            margin-top: 10px;
+            padding: 10px;
+            width: 100%;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #filter-box button:hover {
+            background-color: #0056b3;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- 表单区 -->
+    <div id="filter-box">
+        <h3>搜索实体</h3>
+
+        <label for="entity">Type: </label>
+        <select id="entity" name="entity">
+            <option value="odns" selected>odns</option>
+            <option value="hdns">hdns</option>
+            <option value="asn">asn</option>
+            <option value="Provider">Provider</option>
+            <option value="location">location</option>
+            <option value="cluster">cluster</option>
+        </select><br><br>
+
+        <label for="idname">Name: </label>
+        <input type="text" id="idname" name="idname" /><br><br>
+
+        <label for="depth">Depth:</label>
+        <input type="text" id="depth" name="depth" /><br><br>
+
+        <h3>显示内容</h3>
+        <label><input type="checkbox" id="odns" /> odns</label><br>
+        <label><input type="checkbox" id="hdns" /> hdns</label><br>
+        <label><input type="checkbox" id="cluster" /> cluster</label><br>
+        <label><input type="checkbox" id="asn" /> asn</label><br>
+        <label><input type="checkbox" id="location" /> location</label><br>
+        <label><input type="checkbox" id="Provider" /> Provider</label><br><br>
+
+        <button onclick="updateData()">搜索odns</button>
+    </div>
+
+    <!-- 图形容器 -->
+    <div id="network"></div>
+
+    <!-- 静态框显示节点信息 -->
+    <div id="info-box">
+        <h3>节点信息</h3>
+        <p id="node-details">请选择一个节点查看详细信息。</p>
+    </div>
+
+    <script type="text/javascript">
+        // 节点数据从 Flask 后端传递过来
+        var nodes = {{ nodes | tojson }};
+        var edges = {{ edges | tojson }};
+
+        // 图形容器
+        var container = document.getElementById('network');
+        var infoBox = document.getElementById('info-box');
+        var nodeDetails = document.getElementById('node-details');
+
+        // 数据和选项
+        var data = { nodes: nodes, edges: edges };
+        var options = {
+            nodes: {
+                shape: 'dot',
+                scaling: {
+                    min: 10,
+                    max: 500
+                },
+                font: {
+                    size: 12,
+                },
+                borderWidth: 2,
+            },
+            edges: {
+                font: {
+                    size: 10,
+                },
+            },
+        };
+
+        // 创建图形
+        var network = new vis.Network(container, data, options);
+
+        // 单击节点显示信息
+        network.on('selectNode', function (params) {
+            var nodeId = params.nodes[0];  // 获取单击的节点ID
+            var node = nodes.find(n => n.id === nodeId);
+            if (node) {
+                var nodeInfo = 
+                    `<strong>节点 ID:</strong> ${node.id}<br>
+                    <strong>标签:</strong> ${node.label}<br>
+                    <strong>分组:</strong> ${node.group}<br>
+                    <strong>转发 (fwd):</strong> ${node.fwd}<br>
+                    <strong>缓存 (cache):</strong> ${node.cache || '无'}<br>
+                    <strong>TTL:</strong> ${node.ttl || '无'}<br>
+                    <strong>是否 Anycast:</strong> ${node.anycast}<br>
+                    <strong>是否转发:</strong> ${node.ISFWD || '无'}<br>`;
+                nodeDetails.innerHTML = nodeInfo;
+            }
+        });
+
+        // 更新数据函数
+        function updateData() {
+            var depth = document.getElementById('depth').value;
+            var idname = document.getElementById('idname').value;
+            var entity = document.getElementById('entity').value;
+
+            // 获取多选下拉框选中的值
+            var selectedEntities = Array.from(document.getElementById('entity').selectedOptions).map(option => option.value);
+
+            var selectedFilters = {
+                odns: document.getElementById('odns').checked ? 1 : 0,
+                hdns: document.getElementById('hdns').checked ? 1 : 0,
+                cluster: document.getElementById('cluster').checked ? 1 : 0,
+                asn: document.getElementById('asn').checked ? 1 : 0,
+                location: document.getElementById('location').checked ? 1 : 0,
+                provider: document.getElementById('Provider').checked ? 1 : 0
+            };
+
+            // 将参数发送到后端进行处理
+            fetch('/update_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    depth: depth,
+                    idname: idname,
+                    entity: selectedEntities,
+                    filters: selectedFilters
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 根据后端返回的新数据更新图形
+                nodes = data.nodes;
+                edges = data.edges;
+                network.setData({ nodes: nodes, edges: edges });
+            })
+            .catch(error => console.error('Error updating data:', error));
+        }
+    </script>
+</body>
+</html>
